@@ -1,0 +1,34 @@
+version: '3.8'
+services:
+  db:
+    image: mysql:8.0
+    container_name: zoo_db
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: zoo_shop
+      MYSQL_USER: django
+      MYSQL_PASSWORD: dz_password
+    volumes:
+      - db_/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  backend:
+    build: ../backend
+    container_name: zoo_backend
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ../backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_NAME=zoo_shop
+      - DB_USER=django
+      - DB_PASSWORD=dz_password
+
+volumes:
+  db_
+  
