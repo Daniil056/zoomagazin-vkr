@@ -44,7 +44,7 @@ Backend API: http://localhost:8000/api
 Admin panel: http://localhost:8000/admin
 
 **Ссылка на репозиторий:** 
-`https://github.com/SorokinD/zoomagazin-vkr`
+`https://github.com/Daniil056/zoomagazin-vkr`
 
 В репозитории доступны:
 - Исходный код проекта (папки frontend, backend, docker)
