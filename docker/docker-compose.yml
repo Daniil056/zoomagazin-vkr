@@ -1,4 +1,5 @@
 version: '3.8'
+
 services:
   db:
     image: mysql:8.0
@@ -9,9 +10,10 @@ services:
       MYSQL_USER: django
       MYSQL_PASSWORD: dz_password
     volumes:
-      - db_/var/lib/mysql
+      - db_data:/var/lib/mysql
     ports:
       - "3306:3306"
+    restart: unless-stopped
 
   backend:
     build: ../backend
@@ -28,7 +30,7 @@ services:
       - DB_NAME=zoo_shop
       - DB_USER=django
       - DB_PASSWORD=dz_password
+    restart: unless-stopped
 
 volumes:
-  db_
-  
+  db_data:

@@ -1,54 +1,50 @@
-# Internet Zoo Shop (ВКР)
+# ZooMarket — Интернет-зоомагазин
 
-Проект интернет-зоомагазина для выпускной квалификационной работы.
-Студент: Сорокин Даниил, группа 1ИСП-22.
+## Описание
+Веб-приложение для покупки товаров для домашних животных: корма, игрушки, аксессуары, ветеринарные препараты.
 
-## Описание идеи
-Платформа для продажи товаров для животных с возможностью онлайн-оплаты, 
-личным кабинетом и админ-панелью для управления ассортиментом.
+## 🎨 Макет интерфейса
+**Figma:** [Ссылка на макет](https://www.figma.com/file/ВАШ_FILE_ID)
 
-## Используемый стек технологий
-- **Frontend:** React 18, TypeScript, Vite
-- **Backend:** Python 3.10, Django 4.x
-- **DB:** MySQL 8.0
-- **Deploy:** Docker, Docker-compose
+### Экраны:
+1. Главная — витрина, категории, акции
+2. Каталог — товары с фильтрами
+3. Товар — детальная карточка
+4. Авторизация — вход/регистрация
+5. Корзина — оформление заказа
 
-## Описание архитектуры
-Используется трехуровневая архитектура (Layered Architecture):
-1. Presentation Layer (React SPA)
-2. Application Layer (Django REST API)
-3. Data Layer (MySQL)
+### Сценарии:
+- Просмотр и фильтрация каталога
+- Добавление товара в корзину
+- Оформление заказа с доставкой
+- Регистрация и вход
 
-## Структура каталогов
-- `/frontend` - клиентская часть (React)
-- `/backend` - серверная часть (Django)
-- `/docker` - конфиги контейнеров
+## 🛠 Стек технологий
+| Компонент | Технология |
+|-----------|-----------|
+| Backend | Python + Django 4.2 + DRF |
+| Frontend | React 18 + Vite + TypeScript |
+| Database | MySQL |
+| DevOps | Docker, Git, GitHub |
 
-## Инструкции по запуску
+## 📁 Структура
+ZOOMAGAZINE_VKR/
+├── backend/
+│ ├── articles/ (Product, Category, Cart, Order)
+│ ├── core/ (settings, urls)
+│ └── requirements.txt
+├── frontend/
+│ ├── src/components/ (Layout, Header, Footer, ProductCard)
+│ ├── src/pages/ (Home, Catalog, Product, Login)
+│ └── package.json
+└── docker/docker-compose.yml
 
-### 1. Установка зависимостей
-Для бэкенда:
+## 🚀 Запуск
+
+### Backend
 ```bash
 cd backend
 pip install -r requirements.txt
-
-cd frontend
-npm install
-
-cd docker
-docker-compose up -d
-
-Доступ
-Frontend: http://localhost:5173
-Backend API: http://localhost:8000/api
-Admin panel: http://localhost:8000/admin
-
-**Ссылка на репозиторий:** 
-`https://github.com/Daniil056/zoomagazin-vkr`
-
-В репозитории доступны:
-- Исходный код проекта (папки frontend, backend, docker)
-- Файл `.gitignore` для исключения служебных файлов
-- Файл `README.md` с инструкцией по развёртыванию
-- Конфигурационные файлы проекта
-
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
