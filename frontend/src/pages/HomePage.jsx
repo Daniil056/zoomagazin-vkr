@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import ProductCard from '../components/ProductCard';
-import { productService, categoryService } from '../services/api';
+import { productsAPI, categoriesAPI } from '../services/api';
 
 const HomePage = () => {
     const [products, setProducts] = useState([]);
@@ -12,10 +12,10 @@ const HomePage = () => {
         const fetchData = async () => {
             try {
                 const [productsRes, categoriesRes] = await Promise.all([
-                    productService.getAll({ limit: 8 }),
-                    categoryService.getAll(),
+                    productsAPI.getAll(),
+                    categoriesAPI.getAll(),
                 ]);
-                setProducts(productsRes.data.results || productsRes.data);
+                setProducts(productsRes.data.slice(0, 8));
                 setCategories(categoriesRes.data);
             } catch (err) {
                 console.error('Error:', err);
@@ -31,7 +31,7 @@ const HomePage = () => {
     return (
         <div>
             <section style={styles.hero}>
-                <h1 style={styles.heroTitle}>Всё для ваших питомцев!</h1>
+                <h1 style={styles.heroTitle}>🐾 Всё для ваших питомцев!</h1>
                 <p style={styles.heroSubtitle}>Корма, игрушки, аксессуары с доставкой</p>
                 <Link to="/catalog" style={styles.heroBtn}>Перейти в каталог</Link>
             </section>

@@ -1,30 +1,33 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework import viewsets, status, filters
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from django.shortcuts import get_object_or_404
-from django.db.models import Avg
+from django.db.models import Q
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from .models import Category, Product, Cart, CartItem, Order, OrderItem, Review
 from .serializers import (
     CategorySerializer, ProductListSerializer, ProductDetailSerializer,
-    CartSerializer, CartItemSerializer, OrderSerializer, ReviewSerializer
+    CartSerializer, OrderSerializer, ReviewSerializer
 )
 import uuid
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet для категорий товаров"""
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     lookup_field = 'slug'
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'description']
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet для товаров"""
     queryset = Product.objects.filter(is_available=True)
-    filter_backends = [
-        # search и ordering подключаются через REST_FRAMEWORK settings
-    ]
+    lookup_field = 'slug'
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'description', 'brand']
+    ordering_fields = ['price', 'created_at', 'name']
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
@@ -33,170 +36,145 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         queryset = Product.objects.filter(is_available=True)
-        
-        # Фильтр по категории
         category = self.request.query_params.get('category')
         if category:
             queryset = queryset.filter(category__slug=category)
-        
-        # Фильтр по типу животного
         pet_type = self.request.query_params.get('pet_type')
         if pet_type:
             queryset = queryset.filter(for_pet_type=pet_type)
-        
-        # Фильтр по цене
         min_price = self.request.query_params.get('min_price')
         max_price = self.request.query_params.get('max_price')
         if min_price:
             queryset = queryset.filter(price__gte=min_price)
         if max_price:
             queryset = queryset.filter(price__lte=max_price)
-        
-        # Только в наличии
         if self.request.query_params.get('in_stock') == 'true':
             queryset = queryset.filter(stock__gt=0)
-        
         return queryset
 
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
-    def add_review(self, request, pk=None):
-        """Добавить отзыв к товару"""
-        product = self.get_object()
-        serializer = ReviewSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(product=product, user=request.user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    @action(detail=False, methods=['get'])
+    def by_category(self, request):
+        category_slug = request.query_params.get('category_slug')
+        if category_slug:
+            products = Product.objects.filter(
+                category__slug=category_slug, is_available=True
+            )
+            serializer = self.get_serializer(products, many=True)
+            return Response(serializer.data)
+        return Response([])
 
+    @action(detail=False, methods=['get'])
+    def by_pet_type(self, request):
+        pet_type = request.query_params.get('pet_type')
+        if pet_type:
+            products = Product.objects.filter(
+                for_pet_type=pet_type, is_available=True
+            )
+            serializer = self.get_serializer(products, many=True)
+            return Response(serializer.data)
+        return Response([])
 
-class CartViewSet(viewsets.ViewSet):
-    """ViewSet для работы с корзиной"""
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    @action(detail=False, methods=['get'])
+    def search(self, request):
+        query = request.query_params.get('q', '')
+        if query:
+            products = Product.objects.filter(
+                Q(name__icontains=query) | Q(description__icontains=query) | Q(brand__icontains=query),
+                is_available=True
+            )
+            serializer = self.get_serializer(products, many=True)
+            return Response(serializer.data)
+        return Response([])
 
-    def _get_cart(self, request):
-        """Получить или создать корзину"""
-        if request.user.is_authenticated:
-            cart, _ = Cart.objects.get_or_create(user=request.user)
-        else:
-            session_key = request.session.session_key
-            if not session_key:
-                session_key = request.session.create()
-            cart, _ = Cart.objects.get_or_create(session_key=session_key)
-        return cart
-
-    def list(self, request):
-        """Получить содержимое корзины"""
-        cart = self._get_cart(request)
-        serializer = CartSerializer(cart)
+    @action(detail=True, methods=['get'])
+    def reviews(self, request, slug=None):
+        product = get_object_or_404(Product, slug=slug)
+        reviews = product.reviews.filter(is_approved=True)
+        serializer = ReviewSerializer(reviews, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['post'])
-    def add_item(self, request):
-        """Добавить товар в корзину"""
-        cart = self._get_cart(request)
-        product_id = request.data.get('product_id')
-        quantity = request.data.get('quantity', 1)
-        
-        product = get_object_or_404(Product, id=product_id)
-        
-        cart_item, created = CartItem.objects.get_or_create(
-            cart=cart,
-            product=product,
-            defaults={'quantity': quantity}
-        )
-        
-        if not created:
-            cart_item.quantity += quantity
-            cart_item.save()
-        
+
+# === ПРОСТАЯ КОРЗИНА БЕЗ CSRF ПРОБЛЕМ ===
+@api_view(['GET', 'POST', 'DELETE'])
+@permission_classes([AllowAny])
+@csrf_exempt
+def cart_api_view(request):
+    """Простой API для корзины без ViewSet проблем"""
+    
+    # Получаем или создаём корзину (по сессии для анонимов)
+    session_key = request.session.session_key
+    if not session_key:
+        session_key = request.session.create()
+    
+    cart, _ = Cart.objects.get_or_create(session_key=session_key)
+    
+    if request.method == 'GET':
+        # Возвращаем содержимое корзины
         serializer = CartSerializer(cart)
         return Response(serializer.data)
-
-    @action(detail=False, methods=['post'])
-    def remove_item(self, request):
-        """Удалить товар из корзины"""
-        cart = self._get_cart(request)
-        product_id = request.data.get('product_id')
-        CartItem.objects.filter(cart=cart, product_id=product_id).delete()
-        serializer = CartSerializer(cart)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['post'])
-    def update_quantity(self, request):
-        """Обновить количество товара"""
-        cart = self._get_cart(request)
-        product_id = request.data.get('product_id')
-        quantity = request.data.get('quantity')
+    
+    elif request.method == 'POST':
+        # Добавляем товар
+        action_type = request.data.get('action', 'add')
         
-        cart_item = get_object_or_404(CartItem, cart=cart, product_id=product_id)
-        cart_item.quantity = quantity
-        cart_item.save()
+        if action_type == 'add':
+            product_id = request.data.get('product_id')
+            quantity = int(request.data.get('quantity', 1))
+            
+            if not product_id:
+                return Response({'error': 'product_id required'}, status=400)
+            
+            product = get_object_or_404(Product, id=product_id)
+            
+            cart_item, created = CartItem.objects.get_or_create(
+                cart=cart, product=product, defaults={'quantity': quantity}
+            )
+            if not created:
+                cart_item.quantity += quantity
+                cart_item.save()
+        
+        elif action_type == 'remove':
+            product_id = request.data.get('product_id')
+            if product_id:
+                CartItem.objects.filter(cart=cart, product_id=product_id).delete()
+        
+        elif action_type == 'clear':
+            cart.items.all().delete()
+        
+        elif action_type == 'update':
+            product_id = request.data.get('product_id')
+            quantity = int(request.data.get('quantity', 1))
+            if product_id:
+                cart_item = get_object_or_404(CartItem, cart=cart, product_id=product_id)
+                cart_item.quantity = quantity
+                cart_item.save()
         
         serializer = CartSerializer(cart)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['post'])
-    def clear(self, request):
-        """Очистить корзину"""
-        cart = self._get_cart(request)
+        return Response(serializer.data, status=201)
+    
+    elif request.method == 'DELETE':
         cart.items.all().delete()
-        return Response({'status': 'Cart cleared'})
+        return Response({'status': 'cleared'})
 
 
 class OrderViewSet(viewsets.ModelViewSet):
-    """ViewSet для заказов"""
     serializer_class = OrderSerializer
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [AllowAny]
+    
     def get_queryset(self):
-        return Order.objects.filter(user=self.request.user)
-
-    def create(self, request, *args, **kwargs):
-        """Создать заказ из корзины"""
-        cart = Cart.objects.filter(user=request.user).first()
-        if not cart or not cart.items.exists():
-            return Response(
-                {'error': 'Корзина пуста'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        order_number = f"ORD{uuid.uuid4().hex[:8].upper()}"
-        order_data = request.data.copy()
-        order_data['user'] = request.user.id
-        order_data['order_number'] = order_number
-        order_data['total_price'] = cart.get_total_price()
-        
-        serializer = self.get_serializer(data=order_data)
-        serializer.is_valid(raise_exception=True)
-        order = serializer.save()
-        
-        # Создаём позиции заказа
-        for cart_item in cart.items.all():
-            OrderItem.objects.create(
-                order=order,
-                product=cart_item.product,
-                product_name=cart_item.product.name,
-                quantity=cart_item.quantity,
-                price=cart_item.product.price
-            )
-        
-        # Очищаем корзину
-        cart.items.all().delete()
-        
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Order.objects.filter(user=self.request.user) if self.request.user.is_authenticated else Order.objects.none()
 
 
 class ReviewViewSet(viewsets.ModelViewSet):
-    """ViewSet для отзывов"""
     queryset = Review.objects.filter(is_approved=True)
     serializer_class = ReviewSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-
+    permission_classes = [AllowAny]
+    
     def get_queryset(self):
         product_id = self.request.query_params.get('product_id')
         if product_id:
-            return Review.objects.filter(
-                product_id=product_id, 
-                is_approved=True
-            )
+            return Review.objects.filter(product_id=product_id, is_approved=True)
         return Review.objects.filter(is_approved=True)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user if self.request.user.is_authenticated else None, is_approved=False)
