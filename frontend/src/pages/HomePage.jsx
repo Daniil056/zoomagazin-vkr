@@ -11,12 +11,13 @@ const HomePage = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
+                setLoading(true);
                 const [productsRes, categoriesRes] = await Promise.all([
                     productsAPI.getAll(),
                     categoriesAPI.getAll(),
                 ]);
                 setProducts(productsRes.data.slice(0, 8));
-                setCategories(categoriesRes.data);
+                setCategories(categoriesRes.data.slice(0, 4));
             } catch (err) {
                 console.error('Error:', err);
             } finally {
@@ -29,7 +30,7 @@ const HomePage = () => {
     if (loading) return <div style={{textAlign:'center',padding:'4rem'}}>Загрузка...</div>;
 
     return (
-        <div>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 1rem' }}>
             <section style={styles.hero}>
                 <h1 style={styles.heroTitle}>🐾 Всё для ваших питомцев!</h1>
                 <p style={styles.heroSubtitle}>Корма, игрушки, аксессуары с доставкой</p>
@@ -39,11 +40,11 @@ const HomePage = () => {
             <section style={styles.section}>
                 <h2 style={styles.sectionTitle}>Категории</h2>
                 <div style={styles.catGrid}>
-                    {categories.slice(0,4).map(cat => (
+                    {categories.map(cat => (
                         <Link key={cat.id} to={`/catalog?category=${cat.slug}`} style={styles.catCard}>
                             <div style={styles.catIcon}>🐾</div>
                             <h3>{cat.name}</h3>
-                            <span>{cat.products_count} товаров</span>
+                            <span>{cat.products_count || 0} товаров</span>
                         </Link>
                     ))}
                 </div>

@@ -12,7 +12,12 @@ a { text-decoration: none; color: inherit; }
 button { font-family: inherit; }
 img { max-width: 100%; height: auto; }
 
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
